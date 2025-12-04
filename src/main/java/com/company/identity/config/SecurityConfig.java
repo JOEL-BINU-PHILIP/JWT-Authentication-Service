@@ -44,17 +44,31 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf.disable()) // JWT does not need CSRF
+                .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(auth -> auth
+
+                        // Public endpoints
                         .requestMatchers(
                                 "/auth/register",
                                 "/auth/login",
                                 "/auth/refresh",
+                                "/auth/logout",
                                 "/auth/public-key",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"
                         ).permitAll()
+
+                        // ADMIN-only endpoints
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
+
+                        // SELLER-only endpoints
+                        .requestMatchers("/seller/**").hasRole("SELLER")
+
+                        // BUYER-only endpoints
+                        .requestMatchers("/buyer/**").hasRole("BUYER")
+
+                        // All other endpoints must be authenticated
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider());
