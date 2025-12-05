@@ -11,16 +11,23 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import com.company.identity.security.JwtAuthenticationFilter;
+import com.company.identity.security.CustomUserDetailsService;
+import com.company.identity.security.JwtProvider;
 
 @Configuration
 public class SecurityConfig {
 
     private final CustomUserDetailsService userDetailsService;
     private final PasswordEncoder passwordEncoder;
-
-    public SecurityConfig(CustomUserDetailsService uds, PasswordEncoder passwordEncoder) {
+    private final JwtProvider jwtProvider;
+    public SecurityConfig(CustomUserDetailsService uds,
+                          PasswordEncoder passwordEncoder,
+                          JwtProvider jwtProvider) {
         this.userDetailsService = uds;
         this.passwordEncoder = passwordEncoder;
+        this.jwtProvider = jwtProvider;
     }
 
     // Authentication provider (username + password)
@@ -43,12 +50,12 @@ public class SecurityConfig {
     // Main security filter chain
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtProvider, userDetailsService);
+
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(auth -> auth
-
-                        // Public endpoints
                         .requestMatchers(
                                 "/auth/register",
                                 "/auth/login",
@@ -58,20 +65,14 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"
                         ).permitAll()
-
-                        // ADMIN-only endpoints
                         .requestMatchers("/admin/**").hasRole("ADMIN")
-
-                        // SELLER-only endpoints
                         .requestMatchers("/seller/**").hasRole("SELLER")
-
-                        // BUYER-only endpoints
                         .requestMatchers("/buyer/**").hasRole("BUYER")
-
-                        // All other endpoints must be authenticated
                         .anyRequest().authenticated()
                 )
-                .authenticationProvider(authenticationProvider());
+                .authenticationProvider(authenticationProvider())
+                // add JWT filter before UsernamePasswordAuthenticationFilter
+                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

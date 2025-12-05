@@ -4,6 +4,7 @@ import com.company.identity.dto.AuthResponse;
 import com.company.identity.dto.LoginRequest;
 import com.company.identity.dto.RegisterRequest;
 import com.company.identity.model.RefreshToken;
+import com.company.identity.model.Role;
 import com.company.identity.model.User;
 import com.company.identity.security.JwtProvider;
 import com.company.identity.service.RefreshTokenService;
@@ -74,7 +75,10 @@ public class AuthController {
         return new AuthResponse(
                 jwt,
                 refreshToken.getToken(),
-                15 * 60  // 15 minutes
+                15 * 60, // 15 minutes
+                user.getRoles().stream()
+                        .map(Role::getName)
+                        .toList()
         );
     }
 
@@ -92,7 +96,10 @@ public class AuthController {
         return new AuthResponse(
                 newAccessToken,
                 refreshToken,
-                15 * 60
+                15 * 60,
+                user.getRoles().stream()
+                        .map(Role::getName)
+                        .toList()
         );
     }
 

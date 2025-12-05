@@ -5,9 +5,11 @@ import com.company.identity.model.Role;
 import com.company.identity.model.User;
 import com.nimbusds.jose.*;
 import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import jakarta.annotation.PostConstruct;
+import lombok.Getter;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
@@ -17,9 +19,11 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.text.ParseException;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Component
@@ -27,6 +31,7 @@ public class JwtProvider {
 
     private final JwtConfig config;
     private RSAPrivateKey privateKey;
+    @Getter
     private RSAPublicKey publicKey;
 
     public JwtProvider(JwtConfig config) {
@@ -89,13 +94,11 @@ public class JwtProvider {
 
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
                 .issuer(config.issuer)
-                .subject(user.getId()) // user MongoDB ID
+                // IMPORTANT: use username as subject so CustomUserDetailsService can load
+                .subject(user.getUsername())
                 .issueTime(Date.from(now))
                 .expirationTime(Date.from(expiry))
-                .claim("roles", user.getRoles()
-                        .stream()
-                        .map(Role::getName)
-                        .collect(Collectors.toList()))
+                .claim("roles", user.getRoles().stream().map(Role::getName).collect(Collectors.toList()))
                 .build();
 
         JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.RS256)
@@ -111,7 +114,42 @@ public class JwtProvider {
         return jwt.serialize();
     }
 
-    public RSAPublicKey getPublicKey() {
-        return publicKey;
+    // NEW: validate token signature + expiration
+    public boolean validateToken(String token) {
+        try {
+            SignedJWT jwt = SignedJWT.parse(token);
+            JWSVerifier verifier = new RSASSAVerifier(publicKey);
+            if (!jwt.verify(verifier)) return false;
+
+            Date exp = jwt.getJWTClaimsSet().getExpirationTime();
+            return exp != null && exp.after(new Date());
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
+    // NEW: extract username (subject)
+    public String getUsernameFromToken(String token) {
+        try {
+            SignedJWT jwt = SignedJWT.parse(token);
+            return jwt.getJWTClaimsSet().getSubject();
+        } catch (ParseException e) {
+            throw new RuntimeException("Invalid token");
+        }
+    }
+
+    // NEW: extract roles (as list of strings)
+    @SuppressWarnings("unchecked")
+    public List<String> getRolesFromToken(String token) {
+        try {
+            SignedJWT jwt = SignedJWT.parse(token);
+            Object rolesObj = jwt.getJWTClaimsSet().getClaim("roles");
+            if (rolesObj instanceof List) {
+                return (List<String>) rolesObj;
+            }
+            return List.of();
+        } catch (ParseException e) {
+            return List.of();
+        }
     }
 }
